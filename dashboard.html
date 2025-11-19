@@ -207,12 +207,11 @@
             --df-messenger-send-icon: var(--accent-color);
             --df-messenger-user-message: var(--secondary-blue);
             
-            /* FORCE VISIBILITY FOR CHIPS */
+            /* IMPORTANT: Make chips extremely visible */
             --df-messenger-chips-bg-color: var(--secondary-blue);
             --df-messenger-chips-text-color: var(--accent-color);
             --df-messenger-chips-border-color: var(--accent-color);
             
-            /* Individual Chip Styling */
             --df-messenger-chip-text-color: var(--accent-color);
             --df-messenger-chip-border-color: var(--accent-color);
             --df-messenger-chip-bg-color: rgba(100, 255, 218, 0.1);
@@ -228,7 +227,7 @@
         const dashboardView = document.getElementById('dashboard-view');
         const errorAlert = document.getElementById('error-alert');
         
-        // Global state
+        // Global state to hold user data for the chatbot to access quickly
         let currentUserData = null;
         let currentUserUid = null;
         
@@ -246,7 +245,7 @@
             dashboardView.style.display = 'block';
         }
 
-        // Main Auth Listener
+        // 1. Authentication & Data Loading
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 currentUserUid = user.uid;
@@ -257,7 +256,7 @@
                     if (docSnap.exists()) {
                         updateUI(docSnap.data(), user.email);
                     } else {
-                        console.log("Creating default data...");
+                        // Self-Healing: Create data if missing (Safety net for demo)
                         const mockData = {
                             email: user.email,
                             phoneNumber: "+234" + Math.floor(7000000000 + Math.random() * 900000000),
@@ -286,100 +285,102 @@
             });
         });
 
-        /* =========================================
-           ROBUST CHATBOT CONTROLLER
-           ========================================= */
-        window.addEventListener('DOMContentLoaded', () => {
+        /* ==================================================================
+           2. THE "BRAIN" - CLIENT-SIDE INTERCEPTOR
+           This logic overrides standard Dialogflow behavior to ensure reliability.
+           ================================================================== */
+        window.addEventListener('load', function() {
             const dfMessenger = document.querySelector('df-messenger');
             
-            dfMessenger.addEventListener('df-response-received', async function(event) {
-                const response = event.detail.response;
-                const queryResult = response.queryResult;
-                
-                // 1. Get Intent and User Text
-                const intentName = queryResult.intent ? queryResult.intent.displayName.toLowerCase() : "";
-                const userText = queryResult.queryText ? queryResult.queryText.toLowerCase() : "";
-                
-                console.log(`Chat Event: Intent=[${intentName}] Text=[${userText}]`);
+            if (!dfMessenger) return;
 
-                // 2. Check Data Availability (Silent Recovery)
-                if (!currentUserData) {
-                    // If user is just saying hello, ignore data check
-                    if (intentName.includes('welcome') || userText === 'hi' || userText === 'hello') return;
-                    
-                    // If urgent request, try to fetch data now
-                    if (currentUserUid) {
-                        try {
-                            const snap = await getDoc(doc(db, "users", currentUserUid));
-                            if (snap.exists()) currentUserData = snap.data();
-                        } catch(e) { console.error(e); }
-                    }
-                    
-                    // If still no data
-                    if (!currentUserData) {
-                        dfMessenger.renderCustomText("System is finalizing your connection. Please try again in 5 seconds.");
-                        return;
-                    }
-                }
-
-                // 3. AGGRESSIVE MATCHING LOGIC
+            // We listen for when the bot sends a response.
+            dfMessenger.addEventListener('df-response-received', function(event) {
+                // Safely get the User's original text (what YOU typed)
+                const rawText = event.detail.response.queryResult.queryText;
+                if (!rawText) return; // Should not happen
                 
-                // --- BUY DATA SCENARIO ---
-                // Triggers if intent says "buy" OR user typed "buy data" / "purchase"
-                if (intentName.includes('buy') || userText.includes('buy data') || userText.includes('purchase')) {
+                const userText = rawText.toLowerCase();
+                console.log("User said:", userText);
+
+                // --- LOGIC: BUY DATA FLOW ---
+                // If user says "buy" and ("data" or "plan" or "bundle")
+                if (userText.includes('buy') && (userText.includes('data') || userText.includes('plan') || userText.includes('bundle'))) {
                     
-                    // Prevent double firing if intent detection worked
-                    // We manually render the chips immediately
-                    const richPayload = [
-                        {
-                            "type": "description",
-                            "title": "Data Bundles",
-                            "text": ["Select a plan to purchase instantly:"]
-                        },
-                        {
-                            "type": "chips",
-                            "options": [
-                                { "text": "Starter (₦12,000)" },
-                                { "text": "Pro (₦16,000)" },
-                                { "text": "Ultimate (₦22,000)" }
-                            ]
-                        }
-                    ];
-                    dfMessenger.renderCustomPayload(richPayload);
+                    // Force render the plan chips immediately.
+                    // We use a small timeout to ensure the bot's text bubble (if any) renders first.
+                    setTimeout(() => {
+                        dfMessenger.renderCustomPayload([
+                            {
+                                "type": "description",
+                                "title": "Available Data Plans",
+                                "text": ["Please select a plan below to activate instantly:"]
+                            },
+                            {
+                                "type": "chips",
+                                "options": [
+                                    { "text": "Starter (₦12,000)" },
+                                    { "text": "Pro (₦16,000)" },
+                                    { "text": "Ultimate (₦22,000)" }
+                                ]
+                            }
+                        ]);
+                    }, 200);
                     return;
                 }
 
-                // --- EXECUTE PURCHASE SCENARIO ---
-                if (userText.includes('starter')) processPurchase("Starter Connect", 12000, 100);
-                else if (userText.includes('pro')) processPurchase("Pro Fiber", 16000, 500);
-                else if (userText.includes('ultimate')) processPurchase("Ultimate Gigabit", 22000, 1000);
-
-                // --- CHECK BALANCE SCENARIO ---
-                else if (intentName.includes('balance') || userText.includes('balance') || userText.includes('how much')) {
-                    dfMessenger.renderCustomText(`Your account balance: ₦${currentUserData.accountBalance.toLocaleString()}`);
+                // --- LOGIC: PURCHASE EXECUTION ---
+                // If user clicked a chip or typed the plan name manually
+                if (userText.includes('starter')) {
+                    handleTransaction("Starter Connect", 12000, 100);
+                } else if (userText.includes('pro') && (userText.includes('plan') || userText.includes('fiber') || userText.includes('16'))) {
+                    // Added extra checks for 'pro' to avoid false positives with normal words
+                    handleTransaction("Pro Fiber", 16000, 500);
+                } else if (userText.includes('ultimate')) {
+                    handleTransaction("Ultimate Gigabit", 22000, 1000);
                 }
 
-                // --- CHECK DATA SCENARIO ---
-                else if (intentName.includes('data') || userText.includes('data left') || userText.includes('data remaining')) {
-                    dfMessenger.renderCustomText(`Data remaining: ${currentUserData.dataBalanceGB} GB`);
+                // --- LOGIC: CHECK BALANCE ---
+                else if (userText.includes('balance') || userText.includes('much money')) {
+                    // Wait for bot to finish talking, then inject real data
+                    setTimeout(() => {
+                        const bal = currentUserData ? currentUserData.accountBalance.toLocaleString() : "---";
+                        dfMessenger.renderCustomText(`💰 Your current Airtime Balance is ₦${bal}`);
+                    }, 200);
                 }
-                
-                // --- CHECK PHONE NUMBER ---
-                else if (intentName.includes('phone') || userText.includes('number')) {
-                    dfMessenger.renderCustomText(`Your number: ${currentUserData.phoneNumber}`);
+
+                // --- LOGIC: CHECK DATA ---
+                else if (userText.includes('data') && (userText.includes('left') || userText.includes('remain') || userText.includes('balance') || userText.includes('have'))) {
+                    setTimeout(() => {
+                        const gb = currentUserData ? currentUserData.dataBalanceGB : "---";
+                        dfMessenger.renderCustomText(`📊 You have ${gb} GB of data remaining.`);
+                    }, 200);
+                }
+
+                // --- LOGIC: PHONE NUMBER ---
+                else if (userText.includes('number') || userText.includes('msisdn')) {
+                    setTimeout(() => {
+                        const num = currentUserData ? currentUserData.phoneNumber : "---";
+                        dfMessenger.renderCustomText(`📱 Your Registered Number: ${num}`);
+                    }, 200);
                 }
             });
 
-            // Transaction Function
-            async function processPurchase(planName, cost, gbToAdd) {
-                if (!currentUserData) return;
+            // Helper function to process transactions
+            async function handleTransaction(planName, cost, gbToAdd) {
+                if (!currentUserData) {
+                     dfMessenger.renderCustomText("⚠️ Profile data not loaded yet. Please wait a moment.");
+                     return;
+                }
 
                 if (currentUserData.accountBalance >= cost) {
+                    // 1. Calculate new values
                     const newBalance = currentUserData.accountBalance - cost;
                     const currentGB = parseFloat(currentUserData.dataBalanceGB);
                     const newDataBalance = (currentGB + gbToAdd).toFixed(2);
 
                     try {
+                        // 2. Update Firestore
                         const userRef = doc(db, "users", currentUserUid);
                         await updateDoc(userRef, {
                             accountBalance: newBalance,
@@ -387,17 +388,25 @@
                             plan: planName
                         });
 
+                        // 3. Update Local State & UI
                         currentUserData.accountBalance = newBalance;
                         currentUserData.dataBalanceGB = newDataBalance;
                         currentUserData.plan = planName;
                         updateUI(currentUserData, currentUserData.email);
 
-                        dfMessenger.renderCustomText(`✅ Activated ${planName}!\nNew Balance: ₦${newBalance.toLocaleString()}\nData: ${newDataBalance} GB`);
+                        // 4. Tell the user via Chat
+                        setTimeout(() => {
+                            dfMessenger.renderCustomText(`✅ Success! Activated ${planName}.\n\nOld Balance: ₦${(newBalance + cost).toLocaleString()}\nNew Balance: ₦${newBalance.toLocaleString()}\nData: ${newDataBalance} GB`);
+                        }, 300);
+                        
                     } catch (e) {
-                        dfMessenger.renderCustomText("⚠️ Network Error. Try again.");
+                        console.error(e);
+                        dfMessenger.renderCustomText("⚠️ Transaction Failed due to network error.");
                     }
                 } else {
-                    dfMessenger.renderCustomText(`❌ Insufficient Funds.\nCost: ₦${cost.toLocaleString()}\nBalance: ₦${currentUserData.accountBalance.toLocaleString()}`);
+                    setTimeout(() => {
+                        dfMessenger.renderCustomText(`❌ Insufficient Funds.\n\nRequired: ₦${cost.toLocaleString()}\nAvailable: ₦${currentUserData.accountBalance.toLocaleString()}`);
+                    }, 300);
                 }
             }
         });
