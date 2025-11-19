@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -80,10 +79,21 @@
             border-radius: 10px;
             border-top: 3px solid var(--accent-color);
             box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-            transition: transform 0.3s ease;
+            transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
         }
 
         .card:hover { transform: translateY(-5px); }
+        
+        /* Animation for highlighting cards */
+        @keyframes highlightPulse {
+            0% { box-shadow: 0 0 0 0 rgba(100, 255, 218, 0.7); border-color: var(--accent-color); }
+            70% { box-shadow: 0 0 0 20px rgba(100, 255, 218, 0); border-color: var(--white); }
+            100% { box-shadow: 0 0 0 0 rgba(100, 255, 218, 0); border-color: var(--accent-color); }
+        }
+
+        .highlight-card {
+            animation: highlightPulse 1.5s ease-out infinite;
+        }
 
         .card-label {
             font-size: 0.9rem;
@@ -123,7 +133,6 @@
             display: none;
         }
 
-        /* Support Widget on Dashboard */
         .support-info {
             background: rgba(100, 255, 218, 0.05);
             border: 1px dashed var(--accent-color);
@@ -132,6 +141,113 @@
             border-radius: 10px;
             text-align: center;
         }
+
+        /* --- MODALS (Shared Styles) --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 25, 47, 0.9);
+            display: none; /* Hidden by default */
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background: var(--secondary-blue);
+            padding: 2rem;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            border: 1px solid var(--accent-color);
+            text-align: center;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .modal-content h3 {
+            color: var(--white);
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+        }
+        
+        .modal-description {
+            color: var(--text-dark);
+            margin-bottom: 1.5rem;
+        }
+
+        /* Plan Options */
+        .plan-option {
+            background: var(--primary-blue);
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .plan-option:hover {
+            border-color: var(--accent-color);
+            background: rgba(10, 25, 47, 0.8);
+        }
+
+        .plan-info { text-align: left; }
+        .plan-name { color: var(--white); font-weight: bold; font-size: 1.1rem; }
+        .plan-details { color: var(--text-dark); font-size: 0.9rem; }
+        
+        .plan-price {
+            color: var(--accent-color);
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .close-modal-btn {
+            background: transparent;
+            color: var(--text-dark);
+            border: none;
+            margin-top: 1rem;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .close-modal-btn:hover { color: var(--error); }
+
+        /* Form Styles for Ticket Modal */
+        .form-group { margin-bottom: 1rem; text-align: left; }
+        .form-group label { display: block; color: var(--accent-color); margin-bottom: 0.5rem; font-size: 0.9rem; }
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%;
+            padding: 10px;
+            background: var(--primary-blue);
+            border: 1px solid var(--text-dark);
+            color: var(--white);
+            border-radius: 5px;
+            font-family: inherit;
+        }
+        .submit-btn {
+            background: var(--accent-color);
+            color: var(--primary-blue);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+        }
+        .submit-btn:hover { opacity: 0.9; }
+
     </style>
 </head>
 <body>
@@ -153,28 +269,28 @@
 
             <div class="grid-stats">
                 <!-- Card 1: Balance -->
-                <div class="card">
+                <div class="card" id="card-balance">
                     <div class="card-label">Current Balance</div>
                     <div class="card-value" id="balance-display">---</div>
                     <div class="card-sub">NGN (Nigerian Naira)</div>
                 </div>
 
                 <!-- Card 2: Data -->
-                <div class="card">
+                <div class="card" id="card-data">
                     <div class="card-label">Data Remaining</div>
                     <div class="card-value" id="data-display">---</div>
                     <div class="card-sub">Gigabytes (GB)</div>
                 </div>
 
                 <!-- Card 3: Phone -->
-                <div class="card">
+                <div class="card" id="card-phone">
                     <div class="card-label">Registered MSISDN</div>
                     <div class="card-value" id="phone-display" style="font-size: 1.8rem;">---</div>
                     <div class="card-sub">VoLTE Active</div>
                 </div>
 
                 <!-- Card 4: Plan -->
-                <div class="card">
+                <div class="card" id="card-plan">
                     <div class="card-label">Current Subscription</div>
                     <div class="card-value" id="plan-display" style="font-size: 1.8rem;">---</div>
                     <div class="card-sub">Auto-renew enabled</div>
@@ -188,11 +304,77 @@
         </div>
     </div>
 
+    <!-- PLAN SELECTION MODAL -->
+    <div id="modal-overlay" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Select Data Bundle</h3>
+            <p class="modal-description">Choose a plan to purchase instantly from your balance.</p>
+            
+            <div class="plan-option" onclick="confirmPurchase('Starter Connect', 12000, 100)">
+                <div class="plan-info">
+                    <div class="plan-name">Starter Connect</div>
+                    <div class="plan-details">100 GB Data</div>
+                </div>
+                <div class="plan-price">₦12,000</div>
+            </div>
+
+            <div class="plan-option" onclick="confirmPurchase('Pro Fiber', 16000, 500)">
+                <div class="plan-info">
+                    <div class="plan-name">Pro Fiber</div>
+                    <div class="plan-details">500 GB Data (Best Value)</div>
+                </div>
+                <div class="plan-price">₦16,000</div>
+            </div>
+
+            <div class="plan-option" onclick="confirmPurchase('Ultimate Gigabit', 22000, 1000)">
+                <div class="plan-info">
+                    <div class="plan-name">Ultimate Gigabit</div>
+                    <div class="plan-details">1 TB Data</div>
+                </div>
+                <div class="plan-price">₦22,000</div>
+            </div>
+
+            <button class="close-modal-btn" onclick="closeModal()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- SUPPORT TICKET MODAL (NEW) -->
+    <div id="ticket-overlay" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Report an Issue</h3>
+            <p class="modal-description">Our support team will contact you within 24 hours.</p>
+            
+            <div class="form-group">
+                <label>Contact Email</label>
+                <input type="email" id="ticket-email" readonly style="opacity: 0.7; cursor: not-allowed;">
+            </div>
+
+            <div class="form-group">
+                <label>Issue Category</label>
+                <select id="ticket-category">
+                    <option value="General Inquiry">Request for Agent/Human</option>
+                    <option value="Deposit Issue">Deposit / Payment Issue</option>
+                    <option value="Cannot Buy Data">Cannot Buy Data</option>
+                    <option value="Network Speed">Slow Network Speed</option>
+                    <option value="Other">Other</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="ticket-desc" rows="3" placeholder="Describe your issue briefly..."></textarea>
+            </div>
+
+            <button class="submit-btn" onclick="submitTicket()">Submit Ticket</button>
+            <button class="close-modal-btn" onclick="closeTicketModal()">Cancel</button>
+        </div>
+    </div>
+
     <!-- DIALOGFLOW WIDGET -->
     <script src="https://www.gstatic.com/dialogflow-console/fast/messenger/bootstrap.js?v=1"></script>
     <df-messenger
         intent="WELCOME"
-        chat-title="AirCom Support"
+        chat-title="AirCom Pro Support"
         agent-id="b39e90d7-3a29-4151-b8ad-6fe967331ec5"
         language-code="en"
         chat-icon="assets/support-icon.png"
@@ -206,33 +388,114 @@
             --df-messenger-font-color: var(--white);
             --df-messenger-send-icon: var(--accent-color);
             --df-messenger-user-message: var(--secondary-blue);
-            
-            /* IMPORTANT: Make chips extremely visible */
-            --df-messenger-chips-bg-color: var(--secondary-blue);
-            --df-messenger-chips-text-color: var(--accent-color);
-            --df-messenger-chips-border-color: var(--accent-color);
-            
-            --df-messenger-chip-text-color: var(--accent-color);
-            --df-messenger-chip-border-color: var(--accent-color);
-            --df-messenger-chip-bg-color: rgba(100, 255, 218, 0.1);
+            z-index: 9999;
         }
     </style>
 
     <script type="module">
         import { auth, db } from './firebase-config.js';
         import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
-        import { doc, getDoc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+        import { doc, getDoc, setDoc, updateDoc, collection, addDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
         const loader = document.getElementById('loader');
         const dashboardView = document.getElementById('dashboard-view');
         const errorAlert = document.getElementById('error-alert');
         
-        // Global state to hold user data for the chatbot to access quickly
+        // Modals
+        const modalOverlay = document.getElementById('modal-overlay');
+        const ticketOverlay = document.getElementById('ticket-overlay');
+        
+        // Ticket Inputs
+        const ticketEmailInput = document.getElementById('ticket-email');
+        const ticketCategory = document.getElementById('ticket-category');
+        const ticketDesc = document.getElementById('ticket-desc');
+        
+        // Global state
         let currentUserData = null;
         let currentUserUid = null;
         
+        // --- GLOBAL FUNCTIONS FOR HTML ONCLICK ---
+        window.closeModal = () => {
+            modalOverlay.style.display = 'none';
+        };
+
+        window.closeTicketModal = () => {
+            ticketOverlay.style.display = 'none';
+        };
+
+        window.confirmPurchase = async (planName, cost, gbToAdd) => {
+            modalOverlay.style.display = 'none'; // Close modal first
+            
+            if (!currentUserData) return;
+
+            // Check funds
+            if (currentUserData.accountBalance >= cost) {
+                const newBalance = currentUserData.accountBalance - cost;
+                const currentGB = parseFloat(currentUserData.dataBalanceGB);
+                const newDataBalance = (currentGB + gbToAdd).toFixed(2);
+
+                try {
+                    const userRef = doc(db, "users", currentUserUid);
+                    await updateDoc(userRef, {
+                        accountBalance: newBalance,
+                        dataBalanceGB: newDataBalance,
+                        plan: planName
+                    });
+
+                    // Update Local State
+                    currentUserData.accountBalance = newBalance;
+                    currentUserData.dataBalanceGB = newDataBalance;
+                    currentUserData.plan = planName;
+                    updateUI(currentUserData, currentUserData.email);
+
+                    // Visual Feedback
+                    highlightCard('card-balance');
+                    highlightCard('card-data');
+                    highlightCard('card-plan'); 
+                    
+                    safelyReplyBot(`✅ Success! I've activated the ${planName}. Your new data balance is ${newDataBalance} GB.`);
+                    
+                } catch (e) {
+                    console.error(e);
+                    alert("Transaction Failed: Network Error");
+                }
+            } else {
+                safelyReplyBot(`❌ Insufficient Funds. You need ₦${cost.toLocaleString()} but you only have ₦${currentUserData.accountBalance.toLocaleString()}.`);
+                alert("Insufficient Funds");
+            }
+        };
+
+        window.submitTicket = async () => {
+            if (!ticketDesc.value) {
+                alert("Please describe the issue.");
+                return;
+            }
+            
+            try {
+                // Save to Firestore "support_tickets" collection
+                await addDoc(collection(db, "support_tickets"), {
+                    userId: currentUserUid,
+                    email: ticketEmailInput.value,
+                    category: ticketCategory.value,
+                    description: ticketDesc.value,
+                    status: "open",
+                    createdAt: new Date().toISOString()
+                });
+                
+                ticketOverlay.style.display = 'none';
+                safelyReplyBot(`📝 Ticket Received. We will contact ${ticketEmailInput.value} within 24 hours to resolve the issue.`);
+                ticketDesc.value = ""; // clear input
+            } catch (e) {
+                console.error(e);
+                alert("Error submitting ticket. Please try again.");
+            }
+        };
+
         function updateUI(data, email) {
             currentUserData = data;
+            // Also store email on the data object if not there, useful for ticket pre-fill
+            if(!currentUserData.email) currentUserData.email = email;
+            
             const emailStr = typeof email === 'string' ? email : (data.email || "User");
             
             document.getElementById('user-email').innerText = `Welcome, ${emailStr.split('@')[0]}`;
@@ -240,9 +503,56 @@
             document.getElementById('data-display').innerText = `${data.dataBalanceGB} GB`;
             document.getElementById('phone-display').innerText = data.phoneNumber;
             document.getElementById('plan-display').innerText = data.plan;
+            
+            // Pre-fill ticket email
+            ticketEmailInput.value = emailStr;
 
             loader.style.display = 'none';
             dashboardView.style.display = 'block';
+        }
+
+        function highlightCard(cardId) {
+            const card = document.getElementById(cardId);
+            if(card) {
+                card.classList.remove('highlight-card'); // reset
+                void card.offsetWidth; // force reflow
+                card.classList.add('highlight-card');
+            }
+        }
+        
+        // Safe wrapper to avoid crashing if API is missing
+        function safelyReplyBot(text) {
+            const dfMessenger = document.querySelector('df-messenger');
+            if (dfMessenger && typeof dfMessenger.renderCustomText === 'function') {
+                try {
+                    dfMessenger.renderCustomText(text);
+                } catch(e) {
+                    console.warn("Bot render failed", e);
+                }
+            }
+        }
+        
+        // --- SMART SILENCER: REMOVE FALLBACK MESSAGES ---
+        function removeFallbackMessage() {
+            try {
+                // Attempt to traverse the Shadow DOM to find the "Oops" message
+                const dfMessenger = document.querySelector('df-messenger');
+                const chat = dfMessenger.shadowRoot.querySelector('df-messenger-chat');
+                const list = chat.shadowRoot.querySelector('df-messenger-message-list');
+                const messages = list.shadowRoot.querySelector('#messageList').querySelectorAll('.message-list-wrapper');
+                
+                // Look at the last few messages
+                if (messages.length > 0) {
+                   const lastMsg = messages[messages.length - 1];
+                   // Safer bet for "Oops" detection:
+                   if(lastMsg.innerHTML.includes('Oops') || lastMsg.innerHTML.includes('catch that')) {
+                       lastMsg.style.display = 'none';
+                   }
+                }
+            } catch(e) {
+                // Shadow DOM structure might vary, silent fail
+                console.log("Could not auto-remove fallback.");
+            }
         }
 
         // 1. Authentication & Data Loading
@@ -256,7 +566,7 @@
                     if (docSnap.exists()) {
                         updateUI(docSnap.data(), user.email);
                     } else {
-                        // Self-Healing: Create data if missing (Safety net for demo)
+                        // Create data if missing
                         const mockData = {
                             email: user.email,
                             phoneNumber: "+234" + Math.floor(7000000000 + Math.random() * 900000000),
@@ -286,130 +596,99 @@
         });
 
         /* ==================================================================
-           2. THE "BRAIN" - CLIENT-SIDE INTERCEPTOR
-           This logic overrides standard Dialogflow behavior to ensure reliability.
+           INTERACTIVE CHAT LOGIC (HYBRID MODE)
+           We intercept user intent and trigger UI actions (Modals/Highlights)
            ================================================================== */
-        window.addEventListener('load', function() {
-            const dfMessenger = document.querySelector('df-messenger');
+        window.addEventListener('load', () => {
+            console.log("[System] Dashboard Ready.");
             
-            if (!dfMessenger) return;
-
-            // We listen for when the bot sends a response.
-            dfMessenger.addEventListener('df-response-received', function(event) {
-                // Safely get the User's original text (what YOU typed)
-                const rawText = event.detail.response.queryResult.queryText;
-                if (!rawText) return; // Should not happen
+            // Listen for ANY response from the bot
+            window.addEventListener('df-response-received', (event) => {
                 
-                const userText = rawText.toLowerCase();
-                console.log("User said:", userText);
-
-                // --- LOGIC: BUY DATA FLOW ---
-                // If user says "buy" and ("data" or "plan" or "bundle")
-                if (userText.includes('buy') && (userText.includes('data') || userText.includes('plan') || userText.includes('bundle'))) {
-                    
-                    // Force render the plan chips immediately.
-                    // We use a small timeout to ensure the bot's text bubble (if any) renders first.
-                    setTimeout(() => {
-                        dfMessenger.renderCustomPayload([
-                            {
-                                "type": "description",
-                                "title": "Available Data Plans",
-                                "text": ["Please select a plan below to activate instantly:"]
-                            },
-                            {
-                                "type": "chips",
-                                "options": [
-                                    { "text": "Starter (₦12,000)" },
-                                    { "text": "Pro (₦16,000)" },
-                                    { "text": "Ultimate (₦22,000)" }
-                                ]
-                            }
-                        ]);
-                    }, 200);
-                    return;
-                }
-
-                // --- LOGIC: PURCHASE EXECUTION ---
-                // If user clicked a chip or typed the plan name manually
-                if (userText.includes('starter')) {
-                    handleTransaction("Starter Connect", 12000, 100);
-                } else if (userText.includes('pro') && (userText.includes('plan') || userText.includes('fiber') || userText.includes('16'))) {
-                    // Added extra checks for 'pro' to avoid false positives with normal words
-                    handleTransaction("Pro Fiber", 16000, 500);
-                } else if (userText.includes('ultimate')) {
-                    handleTransaction("Ultimate Gigabit", 22000, 1000);
-                }
-
-                // --- LOGIC: CHECK BALANCE ---
-                else if (userText.includes('balance') || userText.includes('much money')) {
-                    // Wait for bot to finish talking, then inject real data
-                    setTimeout(() => {
-                        const bal = currentUserData ? currentUserData.accountBalance.toLocaleString() : "---";
-                        dfMessenger.renderCustomText(`💰 Your current Airtime Balance is ₦${bal}`);
-                    }, 200);
-                }
-
-                // --- LOGIC: CHECK DATA ---
-                else if (userText.includes('data') && (userText.includes('left') || userText.includes('remain') || userText.includes('balance') || userText.includes('have'))) {
-                    setTimeout(() => {
-                        const gb = currentUserData ? currentUserData.dataBalanceGB : "---";
-                        dfMessenger.renderCustomText(`📊 You have ${gb} GB of data remaining.`);
-                    }, 200);
-                }
-
-                // --- LOGIC: PHONE NUMBER ---
-                else if (userText.includes('number') || userText.includes('msisdn')) {
-                    setTimeout(() => {
-                        const num = currentUserData ? currentUserData.phoneNumber : "---";
-                        dfMessenger.renderCustomText(`📱 Your Registered Number: ${num}`);
-                    }, 200);
-                }
-            });
-
-            // Helper function to process transactions
-            async function handleTransaction(planName, cost, gbToAdd) {
-                if (!currentUserData) {
-                     dfMessenger.renderCustomText("⚠️ Profile data not loaded yet. Please wait a moment.");
-                     return;
-                }
-
-                if (currentUserData.accountBalance >= cost) {
-                    // 1. Calculate new values
-                    const newBalance = currentUserData.accountBalance - cost;
-                    const currentGB = parseFloat(currentUserData.dataBalanceGB);
-                    const newDataBalance = (currentGB + gbToAdd).toFixed(2);
-
-                    try {
-                        // 2. Update Firestore
-                        const userRef = doc(db, "users", currentUserUid);
-                        await updateDoc(userRef, {
-                            accountBalance: newBalance,
-                            dataBalanceGB: newDataBalance,
-                            plan: planName
-                        });
-
-                        // 3. Update Local State & UI
-                        currentUserData.accountBalance = newBalance;
-                        currentUserData.dataBalanceGB = newDataBalance;
-                        currentUserData.plan = planName;
-                        updateUI(currentUserData, currentUserData.email);
-
-                        // 4. Tell the user via Chat
-                        setTimeout(() => {
-                            dfMessenger.renderCustomText(`✅ Success! Activated ${planName}.\n\nOld Balance: ₦${(newBalance + cost).toLocaleString()}\nNew Balance: ₦${newBalance.toLocaleString()}\nData: ${newDataBalance} GB`);
-                        }, 300);
-                        
-                    } catch (e) {
-                        console.error(e);
-                        dfMessenger.renderCustomText("⚠️ Transaction Failed due to network error.");
+                let userQuery = "";
+                let isFallback = false;
+                try {
+                    userQuery = event.detail.response.queryResult.queryText.toLowerCase();
+                    // Detect if server failed to understand
+                    const intentName = event.detail.response.queryResult.intent.displayName;
+                    if (intentName === 'Default Fallback Intent') {
+                        isFallback = true;
                     }
-                } else {
-                    setTimeout(() => {
-                        dfMessenger.renderCustomText(`❌ Insufficient Funds.\n\nRequired: ₦${cost.toLocaleString()}\nAvailable: ₦${currentUserData.accountBalance.toLocaleString()}`);
-                    }, 300);
+                } catch (e) { return; }
+
+                console.log("[System] User Query:", userQuery);
+                
+                // If we identify a keyword locally, we try to remove the server's "Oops" message
+                let handledLocally = false;
+
+                // --- 1. SUPPORT / ISSUE / HUMAN AGENT INTENT (HIGHEST PRIORITY) ---
+                const supportKeywords = [
+                    // Issues
+                    'issue', 'problem', 'problems', 'error', 'deposit', 'fail', 'not working', 'ticket', 'complaint', 'trouble', 'help me',
+                    // Human/Agent Requests (Added per user request)
+                    'support', 'agent', 'human', 'person', 'boss', 'operator', 'customer care', 'call'
+                ];
+                
+                const isSupport = supportKeywords.some(keyword => userQuery.includes(keyword)) || 
+                                  ((userQuery.includes('cant') || userQuery.includes('cannot')) && userQuery.includes('buy'));
+
+                if (isSupport) {
+                    handledLocally = true;
+                    ticketOverlay.style.display = 'flex';
+                    safelyReplyBot("I see you want to contact us. I've opened a ticket form. Please confirm your email and describe the issue/request.");
                 }
-            }
+
+                // --- 2. BUY DATA INTENT ---
+                else if (userQuery.includes('buy') && (userQuery.includes('data') || userQuery.includes('plan') || userQuery.includes('bundle'))) {
+                    handledLocally = true;
+                    modalOverlay.style.display = 'flex';
+                    safelyReplyBot("I've opened the Data Bundle selection menu for you.");
+                }
+
+                // --- 3. CHECK DATA INTENT ---
+                else if (
+                    userQuery.includes('data') && 
+                    (userQuery.includes('left') || userQuery.includes('have') || userQuery.includes('remain') || userQuery.includes('balance') || userQuery.includes('gb'))
+                ) {
+                    handledLocally = true;
+                    highlightCard('card-data');
+                    const gb = currentUserData ? currentUserData.dataBalanceGB : "---";
+                    safelyReplyBot(`📊 You have ${gb} GB data remaining.`);
+                }
+                
+                // --- 4. CHECK ACCOUNT BALANCE INTENT ---
+                else if (userQuery.includes('balance') || userQuery.includes('money') || userQuery.includes('credit') || userQuery.includes('account')) {
+                    handledLocally = true;
+                    highlightCard('card-balance');
+                    const bal = currentUserData ? currentUserData.accountBalance.toLocaleString() : "---";
+                    safelyReplyBot(`💰 Your Account Balance is ₦${bal}. (See dashboard)`);
+                }
+                
+                // --- 5. CHECK CURRENT PLAN INTENT ---
+                else if ((userQuery.includes('plan') || userQuery.includes('subscription')) && !userQuery.includes('buy') && !userQuery.includes('purchase')) {
+                     handledLocally = true;
+                     highlightCard('card-plan');
+                     const currPlan = currentUserData ? currentUserData.plan : "---";
+                     safelyReplyBot(`📅 You are currently on the **${currPlan}** plan.`);
+                }
+                
+                 // --- 6. PHONE NUMBER INTENT ---
+                else if (userQuery.includes('phone') || userQuery.includes('number') || userQuery.includes('msisdn')) {
+                     handledLocally = true;
+                     highlightCard('card-phone');
+                     const num = currentUserData ? currentUserData.phoneNumber : "---";
+                     safelyReplyBot(`📱 Your Number is ${num}`);
+                }
+                
+                // --- CLEANUP ---
+                if (handledLocally && isFallback) {
+                    // If we handled it but server sent "Oops", try to hide the Oops
+                    removeFallbackMessage();
+                }
+
+            });
         });
+
     </script>
 </body>
 </html>

@@ -402,12 +402,12 @@
             .why-choose-us-grid { grid-template-columns: 1fr; }
         }
 		
-		        /* --- CUSTOM DIALOGFLOW WRAPPER AND POPUP STYLES --- */
+		/* --- CUSTOM DIALOGFLOW WRAPPER AND POPUP STYLES --- */
         .df-messenger-wrapper {
             position: fixed;
             bottom: 16px;
             right: 16px;
-            z-index: 9998; /* Just below the messenger itself */
+            z-index: 9990; /* Adjusted z-index */
         }
 
         .custom-chat-popup {
@@ -424,7 +424,7 @@
             visibility: hidden;
             transform: translateY(10px);
             transition: all 0.3s ease-in-out;
-            z-index: 9999;
+            z-index: 9991;
         }
 
         /* The little arrow pointing down */
@@ -508,7 +508,6 @@
     </div>
 
     <main>
-        <!-- Sections remain the same... -->
         <!-- Hero Section -->
         <section id="hero">
             <div class="hero-content container">
@@ -552,7 +551,6 @@
                 <div class="plans-grid">
                     <div class="plan-card">
                         <h3>Starter Connect</h3>
-                        <!-- CHANGE 1: Updated pricing to ₦12,000 -->
                         <p class="plan-price">&#8358;12,000<span>/mo</span></p>
                         <ul class="plan-features">
                             <li>Up to 100 Mbps Download</li>
@@ -564,7 +562,6 @@
                     </div>
                     <div class="plan-card recommended">
                         <h3>Pro Fiber</h3>
-                        <!-- CHANGE 2: Updated pricing to ₦16,000 -->
                         <p class="plan-price">&#8358;16,000<span>/mo</span></p>
                         <ul class="plan-features">
                             <li>Up to 1 Gbps Download</li>
@@ -576,7 +573,6 @@
                     </div>
                     <div class="plan-card">
                         <h3>Ultimate Gigabit</h3>
-                        <!-- CHANGE 3: Updated pricing to ₦22,000 -->
                         <p class="plan-price">&#8358;22,000<span>/mo</span></p>
                         <ul class="plan-features">
                             <li>Up to 2 Gbps Symmetrical</li>
@@ -619,7 +615,6 @@
     <footer class="footer">
         <div class="container">
             <div class="social-links">
-                <!-- Replace # with your actual social media links -->
                 <a href="#">Facebook</a> | 
                 <a href="#">Twitter</a> | 
                 <a href="#">Instagram</a>
@@ -654,8 +649,9 @@
     <style>
       /* --- DIALOGFLOW CUSTOMIZATION --- */
       df-messenger {
-       position: fixed;
-       z-index: 9999;
+       /* Ensure high z-index so it's always on top */
+       position: relative;
+       z-index: 9999 !important;
        --df-messenger-bot-message: #172a45;
        --df-messenger-button-titlebar-color: var(--accent-color);
        --df-messenger-chat-background-color: var(--primary-blue);
@@ -686,7 +682,7 @@
         });
     </script>
 	
-	    <!-- START: Custom Popup Controller Script -->
+	<!-- START: Custom Popup Controller Script -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const popup = document.getElementById('custom-chat-popup');
@@ -706,6 +702,53 @@
                 popup.classList.remove('visible');
                 // And remember that it was closed for this session
                 sessionStorage.setItem('popupClosed', 'true');
+            });
+        });
+        
+        function removeFallbackMessage() {
+            try {
+                const dfMessenger = document.querySelector('df-messenger');
+                const chat = dfMessenger.shadowRoot.querySelector('df-messenger-chat');
+                const list = chat.shadowRoot.querySelector('df-messenger-message-list');
+                const messages = list.shadowRoot.querySelector('#messageList').querySelectorAll('.message-list-wrapper');
+                if (messages.length > 0) {
+                   const lastMsg = messages[messages.length - 1];
+                   if(lastMsg.innerHTML.includes('Oops') || lastMsg.innerHTML.includes('catch that')) {
+                       lastMsg.style.display = 'none';
+                   }
+                }
+            } catch(e) {}
+        }
+
+        /* ==================================================================
+           SMART REDIRECT LOGIC FOR LANDING PAGE
+           If users try to do Dashboard tasks here, we guide them to Login.
+           ================================================================== */
+        window.addEventListener('load', () => {
+            window.addEventListener('df-response-received', (event) => {
+                let userQuery = "";
+                let isFallback = false;
+                try {
+                    userQuery = event.detail.response.queryResult.queryText.toLowerCase();
+                    if(event.detail.response.queryResult.intent.displayName === 'Default Fallback Intent') isFallback = true;
+                } catch (e) { return; }
+
+                const dashboardKeywords = [
+                    'buy', 'data', 'balance', 'account', 'credit', 'issue', 'problem', 'problems', 'support', 'ticket', 'help', 'plan', 'subscription',
+                    // Added Human/Agent Keywords
+                    'human', 'agent', 'operator', 'boss', 'customer care', 'person'
+                ];
+                
+                const isDashboardAction = dashboardKeywords.some(keyword => userQuery.includes(keyword));
+
+                if (isDashboardAction) {
+                    if(isFallback) removeFallbackMessage();
+                    const dfMessenger = document.querySelector('df-messenger');
+                    if (dfMessenger && dfMessenger.renderCustomText) {
+                         // Force the bot to override standard reply with our redirect instruction
+                         dfMessenger.renderCustomText("🔒 To perform this action (Buy Data, Check Balance, Contact Agent), please Login to your Dashboard.");
+                    }
+                }
             });
         });
     </script>
