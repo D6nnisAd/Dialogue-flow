@@ -197,6 +197,7 @@
         language-code="en"
         chat-icon="assets/support-icon.png"
     ></df-messenger>
+    
     <style>
         df-messenger {
             --df-messenger-bot-message: #172a45;
@@ -205,6 +206,16 @@
             --df-messenger-font-color: var(--white);
             --df-messenger-send-icon: var(--accent-color);
             --df-messenger-user-message: var(--secondary-blue);
+            
+            /* FORCE VISIBILITY FOR CHIPS */
+            --df-messenger-chips-bg-color: var(--secondary-blue);
+            --df-messenger-chips-text-color: var(--accent-color);
+            --df-messenger-chips-border-color: var(--accent-color);
+            
+            /* Individual Chip Styling */
+            --df-messenger-chip-text-color: var(--accent-color);
+            --df-messenger-chip-border-color: var(--accent-color);
+            --df-messenger-chip-bg-color: rgba(100, 255, 218, 0.1);
         }
     </style>
 
@@ -217,14 +228,15 @@
         const dashboardView = document.getElementById('dashboard-view');
         const errorAlert = document.getElementById('error-alert');
         
-        // Store current user data globally for the chatbot to access efficiently
+        // Global state
         let currentUserData = null;
         let currentUserUid = null;
         
         function updateUI(data, email) {
-            currentUserData = data; // Save data for chatbot
+            currentUserData = data;
+            const emailStr = typeof email === 'string' ? email : (data.email || "User");
             
-            document.getElementById('user-email').innerText = `Welcome, ${email.split('@')[0]}`;
+            document.getElementById('user-email').innerText = `Welcome, ${emailStr.split('@')[0]}`;
             document.getElementById('balance-display').innerText = `₦${data.accountBalance.toLocaleString()}`;
             document.getElementById('data-display').innerText = `${data.dataBalanceGB} GB`;
             document.getElementById('phone-display').innerText = data.phoneNumber;
@@ -234,6 +246,7 @@
             dashboardView.style.display = 'block';
         }
 
+        // Main Auth Listener
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 currentUserUid = user.uid;
@@ -244,7 +257,7 @@
                     if (docSnap.exists()) {
                         updateUI(docSnap.data(), user.email);
                     } else {
-                        console.log("Document not found. Creating default data...");
+                        console.log("Creating default data...");
                         const mockData = {
                             email: user.email,
                             phoneNumber: "+234" + Math.floor(7000000000 + Math.random() * 900000000),
@@ -260,11 +273,7 @@
                     console.error("Error getting document:", error);
                     loader.style.display = 'none';
                     errorAlert.style.display = 'block';
-                    if (error.code === 'permission-denied') {
-                        errorAlert.innerHTML = `<strong>Database Access Denied</strong><br>Please go to Firebase Console > Firestore > Rules and set them to allow read/write.`;
-                    } else {
-                        errorAlert.innerText = `Error: ${error.message}`;
-                    }
+                    errorAlert.innerHTML = `Error: ${error.message}`;
                 }
             } else {
                 window.location.href = 'login.html';
@@ -278,53 +287,55 @@
         });
 
         /* =========================================
-           CLIENT-SIDE DIALOGFLOW FULFILLMENT
-           Bypasses Billing Requirement
+           ROBUST CHATBOT CONTROLLER
            ========================================= */
-        const dfMessenger = document.querySelector('df-messenger');
-        
-        dfMessenger.addEventListener('df-response-received', function(event) {
-            // 1. Extract the payload from the response
-            const data = event.detail.response.queryResult;
-            const messages = data.fulfillmentMessages;
+        window.addEventListener('DOMContentLoaded', () => {
+            const dfMessenger = document.querySelector('df-messenger');
             
-            if (!messages) return;
+            dfMessenger.addEventListener('df-response-received', async function(event) {
+                const response = event.detail.response;
+                const queryResult = response.queryResult;
+                
+                // 1. Get Intent and User Text
+                const intentName = queryResult.intent ? queryResult.intent.displayName.toLowerCase() : "";
+                const userText = queryResult.queryText ? queryResult.queryText.toLowerCase() : "";
+                
+                console.log(`Chat Event: Intent=[${intentName}] Text=[${userText}]`);
 
-            // 2. Loop through messages to find our Custom Payload
-            messages.forEach(msg => {
-                if (msg.payload && msg.payload.action) {
-                    // Pass the whole payload to get parameters like 'cost' or 'planName'
-                    handleBotAction(msg.payload.action, msg.payload);
+                // 2. Check Data Availability (Silent Recovery)
+                if (!currentUserData) {
+                    // If user is just saying hello, ignore data check
+                    if (intentName.includes('welcome') || userText === 'hi' || userText === 'hello') return;
+                    
+                    // If urgent request, try to fetch data now
+                    if (currentUserUid) {
+                        try {
+                            const snap = await getDoc(doc(db, "users", currentUserUid));
+                            if (snap.exists()) currentUserData = snap.data();
+                        } catch(e) { console.error(e); }
+                    }
+                    
+                    // If still no data
+                    if (!currentUserData) {
+                        dfMessenger.renderCustomText("System is finalizing your connection. Please try again in 5 seconds.");
+                        return;
+                    }
                 }
-            });
-        });
 
-        async function handleBotAction(action, payload) {
-            // Ensure we have data
-            if (!currentUserData) {
-                dfMessenger.renderCustomText("I'm having trouble accessing your account details. Please refresh the page.");
-                return;
-            }
-
-            // 3. Logic to generate response based on action
-            
-            switch (action) {
-                case 'fetch_balance':
-                    dfMessenger.renderCustomText(`Checking your account... Your current main balance is ₦${currentUserData.accountBalance.toLocaleString()}.`);
-                    break;
+                // 3. AGGRESSIVE MATCHING LOGIC
                 
-                case 'fetch_data':
-                    dfMessenger.renderCustomText(`You have ${currentUserData.dataBalanceGB} GB of data remaining on your ${currentUserData.plan} plan.`);
-                    break;
-                
-                case 'fetch_phone':
-                    dfMessenger.renderCustomText(`Your registered phone number is ${currentUserData.phoneNumber}.`);
-                    break;
-                
-                case 'show_data_plans':
-                    dfMessenger.renderCustomText("Select a plan below to purchase instantly:");
-                    // Create Rich Chips for plans
-                    const chipsPayload = [
+                // --- BUY DATA SCENARIO ---
+                // Triggers if intent says "buy" OR user typed "buy data" / "purchase"
+                if (intentName.includes('buy') || userText.includes('buy data') || userText.includes('purchase')) {
+                    
+                    // Prevent double firing if intent detection worked
+                    // We manually render the chips immediately
+                    const richPayload = [
+                        {
+                            "type": "description",
+                            "title": "Data Bundles",
+                            "text": ["Select a plan to purchase instantly:"]
+                        },
                         {
                             "type": "chips",
                             "options": [
@@ -334,55 +345,62 @@
                             ]
                         }
                     ];
-                    dfMessenger.renderCustomPayload(chipsPayload);
-                    break;
+                    dfMessenger.renderCustomPayload(richPayload);
+                    return;
+                }
 
-                case 'purchase_plan':
-                    // Logic for buying data
-                    // Expected payload: { action: "purchase_plan", cost: 12000, gb: 100, planName: "Starter Connect" }
-                    const cost = payload.cost;
-                    const gbToAdd = payload.gb;
-                    const newPlanName = payload.planName;
+                // --- EXECUTE PURCHASE SCENARIO ---
+                if (userText.includes('starter')) processPurchase("Starter Connect", 12000, 100);
+                else if (userText.includes('pro')) processPurchase("Pro Fiber", 16000, 500);
+                else if (userText.includes('ultimate')) processPurchase("Ultimate Gigabit", 22000, 1000);
 
-                    if (currentUserData.accountBalance >= cost) {
-                        // Perform Transaction
-                        const newBalance = currentUserData.accountBalance - cost;
-                        // Parse float to avoid string concatenation issues
-                        const currentGB = parseFloat(currentUserData.dataBalanceGB);
-                        const newDataBalance = (currentGB + gbToAdd).toFixed(2);
+                // --- CHECK BALANCE SCENARIO ---
+                else if (intentName.includes('balance') || userText.includes('balance') || userText.includes('how much')) {
+                    dfMessenger.renderCustomText(`Your account balance: ₦${currentUserData.accountBalance.toLocaleString()}`);
+                }
 
-                        // 1. Update Firestore
-                        try {
-                            const userRef = doc(db, "users", currentUserUid);
-                            await updateDoc(userRef, {
-                                accountBalance: newBalance,
-                                dataBalanceGB: newDataBalance,
-                                plan: newPlanName
-                            });
+                // --- CHECK DATA SCENARIO ---
+                else if (intentName.includes('data') || userText.includes('data left') || userText.includes('data remaining')) {
+                    dfMessenger.renderCustomText(`Data remaining: ${currentUserData.dataBalanceGB} GB`);
+                }
+                
+                // --- CHECK PHONE NUMBER ---
+                else if (intentName.includes('phone') || userText.includes('number')) {
+                    dfMessenger.renderCustomText(`Your number: ${currentUserData.phoneNumber}`);
+                }
+            });
 
-                            // 2. Update Local UI
-                            currentUserData.accountBalance = newBalance;
-                            currentUserData.dataBalanceGB = newDataBalance;
-                            currentUserData.plan = newPlanName;
-                            updateUI(currentUserData, { split: () => [document.getElementById('user-email').innerText.replace('Welcome, ', '')] }); // quick hack to refresh UI text
+            // Transaction Function
+            async function processPurchase(planName, cost, gbToAdd) {
+                if (!currentUserData) return;
 
-                            // 3. Bot Success Message
-                            dfMessenger.renderCustomText(`Success! ✅ I've activated the ${newPlanName}. Your new data balance is ${newDataBalance} GB.`);
-                        
-                        } catch (e) {
-                            console.error(e);
-                            dfMessenger.renderCustomText("Transaction failed due to a network error. Please try again.");
-                        }
-                    } else {
-                        // Insufficient Funds
-                        dfMessenger.renderCustomText(`Transaction declined. ❌ You need ₦${cost.toLocaleString()} but you only have ₦${currentUserData.accountBalance.toLocaleString()}.`);
+                if (currentUserData.accountBalance >= cost) {
+                    const newBalance = currentUserData.accountBalance - cost;
+                    const currentGB = parseFloat(currentUserData.dataBalanceGB);
+                    const newDataBalance = (currentGB + gbToAdd).toFixed(2);
+
+                    try {
+                        const userRef = doc(db, "users", currentUserUid);
+                        await updateDoc(userRef, {
+                            accountBalance: newBalance,
+                            dataBalanceGB: newDataBalance,
+                            plan: planName
+                        });
+
+                        currentUserData.accountBalance = newBalance;
+                        currentUserData.dataBalanceGB = newDataBalance;
+                        currentUserData.plan = planName;
+                        updateUI(currentUserData, currentUserData.email);
+
+                        dfMessenger.renderCustomText(`✅ Activated ${planName}!\nNew Balance: ₦${newBalance.toLocaleString()}\nData: ${newDataBalance} GB`);
+                    } catch (e) {
+                        dfMessenger.renderCustomText("⚠️ Network Error. Try again.");
                     }
-                    break;
-
-                default:
-                    console.log('Unknown action received:', action);
+                } else {
+                    dfMessenger.renderCustomText(`❌ Insufficient Funds.\nCost: ₦${cost.toLocaleString()}\nBalance: ₦${currentUserData.accountBalance.toLocaleString()}`);
+                }
             }
-        }
+        });
     </script>
 </body>
 </html>
