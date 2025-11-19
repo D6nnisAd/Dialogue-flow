@@ -1,0 +1,252 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - AirCom Pro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-blue: #0a192f;
+            --secondary-blue: #172a45;
+            --accent-color: #64ffda;
+            --text-light: #ccd6f6;
+            --text-dark: #8892b0;
+            --white: #ffffff;
+            --error: #ff6b6b;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: var(--primary-blue);
+            color: var(--text-light);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-image: radial-gradient(circle at 50% 50%, #172a45 0%, #0a192f 100%);
+        }
+
+        .auth-container {
+            background: rgba(23, 42, 69, 0.9);
+            padding: 3rem;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            width: 100%;
+            max-width: 450px;
+            border: 1px solid var(--secondary-blue);
+        }
+
+        .auth-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .auth-header img {
+            width: 80px;
+            margin-bottom: 1rem;
+        }
+
+        .auth-header h2 {
+            color: var(--white);
+            font-size: 2rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--accent-color);
+            font-size: 0.9rem;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            background: var(--primary-blue);
+            border: 1px solid var(--text-dark);
+            border-radius: 5px;
+            color: var(--white);
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            border-color: var(--accent-color);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background: var(--accent-color);
+            color: var(--primary-blue);
+            border: none;
+            border-radius: 5px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: opacity 0.3s;
+            font-size: 1rem;
+            margin-top: 1rem;
+        }
+
+        .btn:hover { opacity: 0.9; }
+
+        .switch-mode {
+            text-align: center;
+            margin-top: 1.5rem;
+            font-size: 0.9rem;
+        }
+
+        .switch-mode a {
+            color: var(--accent-color);
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .error-msg {
+            color: var(--error);
+            font-size: 0.85rem;
+            margin-bottom: 1rem;
+            text-align: center;
+            display: none;
+        }
+        
+        .back-link {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: var(--text-dark);
+            text-decoration: none;
+        }
+        .back-link:hover { color: var(--accent-color); }
+    </style>
+</head>
+<body>
+
+    <a href="index.html" class="back-link">← Back to Home</a>
+
+    <div class="auth-container">
+        <div class="auth-header">
+            <!-- Placeholder for logo if available, else text -->
+            <h2>AirCom Portal</h2>
+            <p id="page-title">Login to your dashboard</p>
+        </div>
+
+        <div id="error-message" class="error-msg"></div>
+
+        <form id="auth-form">
+            <div class="form-group">
+                <label for="email">Email Address</label>
+                <input type="email" id="email" required placeholder="user@example.com">
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" required placeholder="••••••••">
+            </div>
+            
+            <button type="submit" class="btn" id="submit-btn">Login</button>
+        </form>
+
+        <div class="switch-mode">
+            <p id="switch-text">Don't have an account? <a id="switch-btn">Register Now</a></p>
+        </div>
+    </div>
+
+    <script type="module">
+        import { auth, db } from './firebase-config.js';
+        import { 
+            signInWithEmailAndPassword, 
+            createUserWithEmailAndPassword, 
+            onAuthStateChanged 
+        } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+        import { 
+            doc, 
+            setDoc 
+        } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+
+        const form = document.getElementById('auth-form');
+        const emailInput = document.getElementById('email');
+        const passInput = document.getElementById('password');
+        const switchBtn = document.getElementById('switch-btn');
+        const pageTitle = document.getElementById('page-title');
+        const submitBtn = document.getElementById('submit-btn');
+        const switchText = document.getElementById('switch-text');
+        const errorMsg = document.getElementById('error-message');
+
+        let isLogin = true;
+
+        // Check if already logged in
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                window.location.href = 'dashboard.html';
+            }
+        });
+
+        switchBtn.addEventListener('click', () => {
+            isLogin = !isLogin;
+            if (isLogin) {
+                pageTitle.innerText = "Login to your dashboard";
+                submitBtn.innerText = "Login";
+                switchText.innerHTML = `Don't have an account? <a id="switch-btn">Register Now</a>`;
+            } else {
+                pageTitle.innerText = "Create a new account";
+                submitBtn.innerText = "Register";
+                switchText.innerHTML = `Already have an account? <a id="switch-btn">Login Here</a>`;
+            }
+            // Re-bind event because innerHTML destroyed the old node
+            document.getElementById('switch-btn').addEventListener('click', () => switchBtn.click());
+            errorMsg.style.display = 'none';
+        });
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = emailInput.value;
+            const password = passInput.value;
+            
+            errorMsg.style.display = 'none';
+            submitBtn.disabled = true;
+            submitBtn.innerText = "Processing...";
+
+            try {
+                if (isLogin) {
+                    // Login Logic
+                    await signInWithEmailAndPassword(auth, email, password);
+                    // Redirect handled by onAuthStateChanged
+                } else {
+                    // Registration Logic
+                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    const user = userCredential.user;
+
+                    // Generate Mock Data for Engineering Project
+                    const mockData = {
+                        email: email,
+                        phoneNumber: "+234" + Math.floor(7000000000 + Math.random() * 900000000), // Random +234 number
+                        accountBalance: Math.floor(Math.random() * 50000) + 5000, // Random Balance 5k - 55k
+                        dataBalanceGB: (Math.random() * 500).toFixed(2), // Random Data 0-500GB
+                        plan: "Pro Fiber",
+                        createdAt: new Date().toISOString()
+                    };
+
+                    // Save to Firestore
+                    await setDoc(doc(db, "users", user.uid), mockData);
+                    
+                    // Redirect handled by onAuthStateChanged
+                }
+            } catch (error) {
+                console.error(error);
+                errorMsg.innerText = error.message.replace("Firebase: ", "");
+                errorMsg.style.display = 'block';
+                submitBtn.disabled = false;
+                submitBtn.innerText = isLogin ? "Login" : "Register";
+            }
+        });
+    </script>
+</body>
+</html>
