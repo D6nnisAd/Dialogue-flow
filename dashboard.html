@@ -14,6 +14,8 @@
             --text-light: #ccd6f6;
             --text-dark: #8892b0;
             --white: #ffffff;
+            --error: #ff6b6b;
+            --success: #4caf50;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -109,6 +111,17 @@
             font-size: 1.5rem;
             color: var(--accent-color);
         }
+        
+        .error-alert {
+            background: rgba(255, 107, 107, 0.1);
+            border: 1px solid var(--error);
+            color: var(--error);
+            padding: 1rem;
+            border-radius: 5px;
+            text-align: center;
+            margin-bottom: 2rem;
+            display: none;
+        }
 
         /* Support Widget on Dashboard */
         .support-info {
@@ -129,6 +142,7 @@
     </div>
 
     <div class="container" id="main-content">
+        <div id="error-alert" class="error-alert"></div>
         <div class="loader" id="loader">Connecting to Database...</div>
         
         <div id="dashboard-view" style="display:none;">
@@ -174,7 +188,7 @@
         </div>
     </div>
 
-    <!-- DIALOGFLOW WIDGET RE-INCLUDED FOR DASHBOARD CONTEXT -->
+    <!-- DIALOGFLOW WIDGET -->
     <script src="https://www.gstatic.com/dialogflow-console/fast/messenger/bootstrap.js?v=1"></script>
     <df-messenger
         intent="WELCOME"
@@ -197,12 +211,19 @@
     <script type="module">
         import { auth, db } from './firebase-config.js';
         import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
-        import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+        import { doc, getDoc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
         const loader = document.getElementById('loader');
         const dashboardView = document.getElementById('dashboard-view');
+        const errorAlert = document.getElementById('error-alert');
+        
+        // Store current user data globally for the chatbot to access efficiently
+        let currentUserData = null;
+        let currentUserUid = null;
         
         function updateUI(data, email) {
+            currentUserData = data; // Save data for chatbot
+            
             document.getElementById('user-email').innerText = `Welcome, ${email.split('@')[0]}`;
             document.getElementById('balance-display').innerText = `₦${data.accountBalance.toLocaleString()}`;
             document.getElementById('data-display').innerText = `${data.dataBalanceGB} GB`;
@@ -215,24 +236,15 @@
 
         onAuthStateChanged(auth, async (user) => {
             if (user) {
+                currentUserUid = user.uid;
                 try {
-                    // Pass User ID to Dialogflow so the bot knows who is talking
-                    const dfMessenger = document.querySelector('df-messenger');
-                    if (dfMessenger) {
-                        dfMessenger.setAttribute('user-id', user.uid);
-                    }
-
-                    // User is signed in, fetch data
                     const docRef = doc(db, "users", user.uid);
                     const docSnap = await getDoc(docRef);
 
                     if (docSnap.exists()) {
                         updateUI(docSnap.data(), user.email);
                     } else {
-                        // SELF-HEALING: Data doesn't exist (maybe created via console or registration error).
-                        // Create it now to ensure dashboard works.
-                        console.log("Document not found. Creating default data for user...");
-                        
+                        console.log("Document not found. Creating default data...");
                         const mockData = {
                             email: user.email,
                             phoneNumber: "+234" + Math.floor(7000000000 + Math.random() * 900000000),
@@ -241,30 +253,20 @@
                             plan: "Pro Fiber",
                             createdAt: new Date().toISOString()
                         };
-
                         await setDoc(docRef, mockData);
                         updateUI(mockData, user.email);
                     }
                 } catch (error) {
                     console.error("Error getting document:", error);
-                    // Even on error, we could show dummy data for a student demo, 
-                    // but let's show the error to be honest about the connection.
-                    loader.innerText = "Error connecting to database. Check console.";
-                    
-                    // Fallback for demo purposes if completely offline/broken config:
-                    // Uncomment below to force UI even on error
-                    /*
-                    const offlineData = {
-                        accountBalance: 0,
-                        dataBalanceGB: 0,
-                        phoneNumber: "Error",
-                        plan: "Offline"
-                    };
-                    updateUI(offlineData, user.email);
-                    */
+                    loader.style.display = 'none';
+                    errorAlert.style.display = 'block';
+                    if (error.code === 'permission-denied') {
+                        errorAlert.innerHTML = `<strong>Database Access Denied</strong><br>Please go to Firebase Console > Firestore > Rules and set them to allow read/write.`;
+                    } else {
+                        errorAlert.innerText = `Error: ${error.message}`;
+                    }
                 }
             } else {
-                // User is not signed in, redirect
                 window.location.href = 'login.html';
             }
         });
@@ -274,6 +276,113 @@
                 window.location.href = 'login.html';
             });
         });
+
+        /* =========================================
+           CLIENT-SIDE DIALOGFLOW FULFILLMENT
+           Bypasses Billing Requirement
+           ========================================= */
+        const dfMessenger = document.querySelector('df-messenger');
+        
+        dfMessenger.addEventListener('df-response-received', function(event) {
+            // 1. Extract the payload from the response
+            const data = event.detail.response.queryResult;
+            const messages = data.fulfillmentMessages;
+            
+            if (!messages) return;
+
+            // 2. Loop through messages to find our Custom Payload
+            messages.forEach(msg => {
+                if (msg.payload && msg.payload.action) {
+                    // Pass the whole payload to get parameters like 'cost' or 'planName'
+                    handleBotAction(msg.payload.action, msg.payload);
+                }
+            });
+        });
+
+        async function handleBotAction(action, payload) {
+            // Ensure we have data
+            if (!currentUserData) {
+                dfMessenger.renderCustomText("I'm having trouble accessing your account details. Please refresh the page.");
+                return;
+            }
+
+            // 3. Logic to generate response based on action
+            
+            switch (action) {
+                case 'fetch_balance':
+                    dfMessenger.renderCustomText(`Checking your account... Your current main balance is ₦${currentUserData.accountBalance.toLocaleString()}.`);
+                    break;
+                
+                case 'fetch_data':
+                    dfMessenger.renderCustomText(`You have ${currentUserData.dataBalanceGB} GB of data remaining on your ${currentUserData.plan} plan.`);
+                    break;
+                
+                case 'fetch_phone':
+                    dfMessenger.renderCustomText(`Your registered phone number is ${currentUserData.phoneNumber}.`);
+                    break;
+                
+                case 'show_data_plans':
+                    dfMessenger.renderCustomText("Select a plan below to purchase instantly:");
+                    // Create Rich Chips for plans
+                    const chipsPayload = [
+                        {
+                            "type": "chips",
+                            "options": [
+                                { "text": "Starter (₦12,000)" },
+                                { "text": "Pro (₦16,000)" },
+                                { "text": "Ultimate (₦22,000)" }
+                            ]
+                        }
+                    ];
+                    dfMessenger.renderCustomPayload(chipsPayload);
+                    break;
+
+                case 'purchase_plan':
+                    // Logic for buying data
+                    // Expected payload: { action: "purchase_plan", cost: 12000, gb: 100, planName: "Starter Connect" }
+                    const cost = payload.cost;
+                    const gbToAdd = payload.gb;
+                    const newPlanName = payload.planName;
+
+                    if (currentUserData.accountBalance >= cost) {
+                        // Perform Transaction
+                        const newBalance = currentUserData.accountBalance - cost;
+                        // Parse float to avoid string concatenation issues
+                        const currentGB = parseFloat(currentUserData.dataBalanceGB);
+                        const newDataBalance = (currentGB + gbToAdd).toFixed(2);
+
+                        // 1. Update Firestore
+                        try {
+                            const userRef = doc(db, "users", currentUserUid);
+                            await updateDoc(userRef, {
+                                accountBalance: newBalance,
+                                dataBalanceGB: newDataBalance,
+                                plan: newPlanName
+                            });
+
+                            // 2. Update Local UI
+                            currentUserData.accountBalance = newBalance;
+                            currentUserData.dataBalanceGB = newDataBalance;
+                            currentUserData.plan = newPlanName;
+                            updateUI(currentUserData, { split: () => [document.getElementById('user-email').innerText.replace('Welcome, ', '')] }); // quick hack to refresh UI text
+
+                            // 3. Bot Success Message
+                            dfMessenger.renderCustomText(`Success! ✅ I've activated the ${newPlanName}. Your new data balance is ${newDataBalance} GB.`);
+                        
+                        } catch (e) {
+                            console.error(e);
+                            dfMessenger.renderCustomText("Transaction failed due to a network error. Please try again.");
+                        }
+                    } else {
+                        // Insufficient Funds
+                        dfMessenger.renderCustomText(`Transaction declined. ❌ You need ₦${cost.toLocaleString()} but you only have ₦${currentUserData.accountBalance.toLocaleString()}.`);
+                    }
+                    break;
+
+                default:
+                    console.log('Unknown action received:', action);
+            }
+        }
     </script>
 </body>
 </html>
